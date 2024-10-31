@@ -2,10 +2,13 @@ from packet import Packet
 from TCPconnection import TCP_connection
 from traceStatistics import Trace_statistics
 import struct
+import sys
 
 def parse_file(file, TCP_connections):
     with open(file, "rb") as f:
         global_header = f.read(24)
+
+        capture_start_time = None
 
         while True:
             packet_header = f.read(16)  # Each packet header is 16 bytes long
@@ -18,19 +21,24 @@ def parse_file(file, TCP_connections):
             # Read the packet data
             packet_data = f.read(incl_len)
 
+            if capture_start_time is None:
+                capture_start_time = float(ts_sec) + ts_usec / 1_000_000
+
+            packet_time = float(ts_sec) + ts_usec / 1_000_000 - capture_start_time
+
             packet = Packet() #new packet
-            packet.time_stamp = f"{ts_sec}.{ts_usec}"
+            packet.time_stamp = packet_time
        
             # first 14 bytes is the ethernet header 
-            #then get the ipv4 header the 5th bit plus 4 is the IHL to determine the header length then skip this and get to the TCP header
-            # then extract the forst 20 bytes to get info needed
+            #then get the ipv4 header, the 5th bit plus 4 is the IHL to determine the header length then skip this and get to the TCP header
+            # then extract the first 20 bytes to get info needed
             ethernet_header = packet_data[:14]
             eth_fields = struct.unpack('!6s6sH', ethernet_header)
             ethertype = eth_fields[2]
             if ethertype != 0x0800:  # Only handle IPv4 (Ethertype 0x0800)
                 return
 
-            # 2. Parse the IPv4 header (starts after 14 bytes)
+            #Parse the IPv4 header (starts after 14 bytes)
             ipv4_header = packet_data[14:34]  # First 20 bytes of the IPv4 header
             ipv4_fields = struct.unpack('!BBHHHBBH4s4s', ipv4_header)
             total_length = ipv4_fields[2]
@@ -44,7 +52,7 @@ def parse_file(file, TCP_connections):
                 continue # not a TCP
             
 
-            # 3. Skip the rest of the IPv4 header if IHL > 20 bytes
+            #Skip the rest of the IPv4 header if IHL > 20 bytes
             ipv4_end = 14 + ihl  # Calculate the end of the IPv4 header
             tcp_header = packet_data[ipv4_end:ipv4_end+20]  # Next 20 bytes for the TCP header
             
@@ -80,7 +88,7 @@ def parse_file(file, TCP_connections):
                 "PSH": psh_flag,
                 "ACK": ack_flag,
                 "URG": urg_flag
-}
+            }
             
             tcp_segment_length = total_length - ihl - tcp_header_length
             packet.segment_length = tcp_segment_length
@@ -108,17 +116,35 @@ def parse_file(file, TCP_connections):
 
 
 def main():
+    '''
+    Main entry point of the program.
+    Processes a .cap file by creating a dictionary of each TCP connection,
+    analyzing each connection, and printing the output.
+    '''
     TCP_connections = {}
-    parse_file(r'C:\Users\matey\uvic\CSC361\A2\sample-capture-file.cap',TCP_connections)
+    
+    # Ensure a capture file path is provided as a command-line argument
+    if len(sys.argv) < 2:
+        print("Please enter a .cap file")
+        sys.exit(1)
+    
+    # Parse the capture file and populate the TCP_connections dictionary
+    cap_file_path = sys.argv[1]
+    parse_file(cap_file_path, TCP_connections)
+
+    # Analyze each individual TCP connection
     for connection_id, connection in TCP_connections.items():
-            connection.analyze_connection()
-            print(connection)
-            print("-------------------------------------")
+        connection.analyze_connection()
+
+    # Analyze the entire trace based on connection data
     trace_statistics = Trace_statistics(TCP_connections)
     trace_statistics.analyze_trace()
+    trace_statistics.analyze_complete_connections()
+    
+    # Print the analysis results
+    trace_statistics.print_output()
     
     
-
 if __name__ == "__main__":
     main()
 
