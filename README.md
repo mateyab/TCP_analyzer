@@ -7,7 +7,7 @@ TCP Analyzer is a Python program that processes `.cap` files to analyze TCP conn
 
 To run this program:
 
-1. Make sure you have Python 3 installed.
+1. Make sure your `.cap` file, tcp.py, TCPconnection.py, packet.py, and traceStatistics.py are in the same directory.
 2. Run the following command in your terminal:
 
     ```
